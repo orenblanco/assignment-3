@@ -5,7 +5,8 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
-
+// #include "proc.c"
+extern struct proc proc[0];
 uint64
 sys_exit(void)
 {
@@ -88,4 +89,39 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+uint64
+sys_map_shared_pages(void)
+{
+  uint64 src_va;
+  int size;
+  int dst_pid;
+
+  argaddr(0, &src_va); 
+  argint(1, &size) ; 
+  argint(2, &dst_pid);
+
+  struct proc* dst_proc ;
+  for (dst_proc = proc; dst_proc < &proc[NPROC]; dst_proc++) {
+    if (dst_proc->pid == dst_pid) {
+      break;
+    }
+  }
+  if (!dst_proc)
+    return -1;
+
+  return map_shared_pages(myproc(), dst_proc, src_va, size);
+}
+
+uint64
+sys_unmap_shared_pages(void)
+{
+  uint64 addr;
+  int size;
+
+  argaddr(0, &addr);
+  argint(1, &size);
+  
+
+  return unmap_shared_pages(myproc(), addr, size);
 }

@@ -6,6 +6,9 @@
 #include "defs.h"
 #include "fs.h"
 
+#include "spinlock.h"
+#include "proc.h"
+
 /*
  * the kernel's page table.
  */
@@ -183,7 +186,7 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       panic("uvmunmap: not mapped");
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
-    if(do_free){
+    if(do_free && !(*pte & PTE_S)){
       uint64 pa = PTE2PA(*pte);
       kfree((void*)pa);
     }
@@ -452,15 +455,22 @@ map_shared_pages(struct proc* src_proc, struct proc* dst_proc,
 
   for (uint64 addr = src_start; addr < src_end; addr += PGSIZE, dst_addr += PGSIZE) {
     pte_t *pte = walk(src_proc->pagetable, addr, 0);
+    
     if (pte == 0 || !(*pte & PTE_V) || !(*pte & PTE_U)) {
-      return 0; // invalid page
+      if(addr > src_start){
+        uvmunmap(dst_proc->pagetable, dst_base, (dst_addr - dst_base) / PGSIZE, 0);
+      }
+      return -1; // invalid page
     }
 
     uint64 pa = PTE2PA(*pte);
     int flags = PTE_FLAGS(*pte) | PTE_S;
 
-    if (mappages(dst_proc->pagetable, dst_addr, PGSIZE, pa, flags) < 0) {
-      return 0; // failed to map
+    if (mappages(dst_proc->pagetable, dst_addr, PGSIZE, pa, flags) != 0) {
+      if(addr > src_start){
+        uvmunmap(dst_proc->pagetable, dst_base, (dst_addr - dst_base) / PGSIZE, 0);
+      }
+      return -1; // failed to map
     }
   }
 
@@ -469,4 +479,27 @@ map_shared_pages(struct proc* src_proc, struct proc* dst_proc,
     dst_proc->sz = dst_addr;
 
   return dst_base + offset;
+}
+uint64
+unmap_shared_pages(struct proc* p, uint64 addr, uint64 size)
+{
+  uint64 start = PGROUNDDOWN(addr);
+  uint64 end = PGROUNDUP(addr + size);
+  uint64 aa = start;
+  for (uint64 a = start; a <= end; a += PGSIZE, aa += PGSIZE) {
+    pte_t *pte = walk(p->pagetable, a, 0);
+    if (pte == 0 || !(*pte & PTE_V) || !(*pte & PTE_U)) {
+      return -1; // not valid shared mapping
+    }
+  }
+  printf("Number of pages to unmap: %d\n", ((end - start) / PGSIZE));
+  uvmunmap(p->pagetable, start, (end - start) / PGSIZE, 0); // do_free = 0
+
+  printf("before if \n");
+  // if (aa == end){
+  //   printf("enter the size if \n");
+    p->sz = start;
+  // }
+
+  return 0;
 }
