@@ -437,3 +437,36 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+uint64
+map_shared_pages(struct proc* src_proc, struct proc* dst_proc,
+                 uint64 src_va, uint64 size)
+{
+  uint64 src_start = PGROUNDDOWN(src_va);
+  uint64 src_end = PGROUNDUP(src_va + size);
+  uint64 offset = src_va - src_start;
+
+  // Start mapping at the next available page-aligned address in dst
+  uint64 dst_base = PGROUNDUP(dst_proc->sz);
+  uint64 dst_addr = dst_base;
+
+  for (uint64 addr = src_start; addr < src_end; addr += PGSIZE, dst_addr += PGSIZE) {
+    pte_t *pte = walk(src_proc->pagetable, addr, 0);
+    if (pte == 0 || !(*pte & PTE_V) || !(*pte & PTE_U)) {
+      return 0; // invalid page
+    }
+
+    uint64 pa = PTE2PA(*pte);
+    int flags = PTE_FLAGS(*pte) | PTE_S;
+
+    if (mappages(dst_proc->pagetable, dst_addr, PGSIZE, pa, flags) < 0) {
+      return 0; // failed to map
+    }
+  }
+
+  // Update destination process size
+  if (dst_proc->sz < dst_addr)
+    dst_proc->sz = dst_addr;
+
+  return dst_base + offset;
+}
