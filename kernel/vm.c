@@ -445,15 +445,17 @@ uint64
 map_shared_pages(struct proc* src_proc, struct proc* dst_proc,
                  uint64 src_va, uint64 size)
 {
+  acquire(&dst_proc->lock);
+  acquire(&src_proc->lock);
   uint64 src_start = PGROUNDDOWN(src_va);
   uint64 src_end = PGROUNDUP(src_va + size);
   uint64 offset = src_va - src_start;
-
   // Start mapping at the next available page-aligned address in dst
   uint64 dst_base = PGROUNDUP(dst_proc->sz);
   uint64 dst_addr = dst_base;
 
   for (uint64 addr = src_start; addr < src_end; addr += PGSIZE, dst_addr += PGSIZE) {
+
     pte_t *pte = walk(src_proc->pagetable, addr, 0);
     
     if (pte == 0 || !(*pte & PTE_V) || !(*pte & PTE_U)) {
@@ -477,29 +479,32 @@ map_shared_pages(struct proc* src_proc, struct proc* dst_proc,
   // Update destination process size
   if (dst_proc->sz < dst_addr)
     dst_proc->sz = dst_addr;
-
+  release(&dst_proc->lock);
+  release(&src_proc->lock);
   return dst_base + offset;
 }
+
 uint64
 unmap_shared_pages(struct proc* p, uint64 addr, uint64 size)
 {
+  acquire(&p->lock);
   uint64 start = PGROUNDDOWN(addr);
   uint64 end = PGROUNDUP(addr + size);
   uint64 aa = start;
-  for (uint64 a = start; a <= end; a += PGSIZE, aa += PGSIZE) {
+  for (uint64 a = start; a < end; a += PGSIZE, aa += PGSIZE) {
     pte_t *pte = walk(p->pagetable, a, 0);
     if (pte == 0 || !(*pte & PTE_V) || !(*pte & PTE_U)) {
       return -1; // not valid shared mapping
     }
   }
-  printf("Number of pages to unmap: %d\n", ((end - start) / PGSIZE));
+  
   uvmunmap(p->pagetable, start, (end - start) / PGSIZE, 0); // do_free = 0
 
-  printf("before if \n");
+ 
   // if (aa == end){
   //   printf("enter the size if \n");
     p->sz = start;
   // }
-
+  release(&p->lock);
   return 0;
 }
