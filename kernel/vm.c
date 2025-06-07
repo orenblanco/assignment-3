@@ -476,7 +476,6 @@ map_shared_pages(struct proc* src_proc, struct proc* dst_proc,
     }
   }
 
-  // Update destination process size
   if (dst_proc->sz < dst_addr)
     dst_proc->sz = dst_addr;
   release(&dst_proc->lock);
@@ -499,12 +498,7 @@ unmap_shared_pages(struct proc* p, uint64 addr, uint64 size)
   }
   
   uvmunmap(p->pagetable, start, (end - start) / PGSIZE, 0); // do_free = 0
-
- 
-  // if (aa == end){
-  //   printf("enter the size if \n");
-    p->sz = start;
-  // }
+  p->sz = start;
   release(&p->lock);
   return 0;
 }

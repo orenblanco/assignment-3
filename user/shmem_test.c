@@ -9,7 +9,7 @@ int main(int argc, char *argv[]) {
         disable_unmap = 1;
     }
 
-    char *buf = malloc(MAP_SIZE);
+    
     int p[2];
     pipe(p);
 
@@ -49,6 +49,7 @@ int main(int argc, char *argv[]) {
         exit(0);
     } else {
         // Parent process
+        char *buf = malloc(MAP_SIZE);
         close(p[0]);
         uint64 shared_addr = map_shared_pages((uint64)buf, MAP_SIZE, pid);
         write(p[1], &shared_addr, sizeof(shared_addr));
