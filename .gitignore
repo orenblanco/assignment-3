@@ -15,3 +15,11 @@ mkfs
 kernel/kernel
 user/usys.S
 .gdbinit
+
+# Python
+__pycache__/
+*.pyc
+
+# Generated plots and test data
+test_plot.png
+temperature_fit_plot.png
